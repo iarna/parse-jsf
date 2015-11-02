@@ -97,17 +97,42 @@ function isNL (char) {
   return char === '\n'
 }
 
+function isComment (char) {
+  return char === '#'
+}
+
 function line_start (hl, char) {
-  if (char === '#') return eolcomment
+  if (isComment(char)) return eolcomment
   if (isNL(char)) return newline(hl)
   if (isSpace(char)) return line_start
   if (char === '=') return defcolor_start
   if (char === ':') return defstate_start
   if (char === '.') return cmd_start
   if (char === '*') return stateline_glob(hl)
-  if (char === '&') return stateline_buffer(hl)
+  if (char === '&') return stateline_delim(hl)
   if (char === '"') return stateline_str(hl)
   if (char === 'd') return done_start(hl, char)
+  if (char === '-') return sync_start(hl, char)
+  throw new Error('Invalid')
+}
+
+function sync_start (hl) {
+  hl.declr = {type: 'sync', lines: ''}
+  return sync
+}
+
+function sync (hl, char) {
+  if (isNL(char)) return newline(hl)
+  if (isSpace(char)) return eolspace
+  if (/\D/.test(char)) throw new Error('Invalid')
+  hl.declr.lines += char
+  return sync
+}
+
+function eolspace (hl, char) {
+  if (isSpace(char)) return eolspace
+  if (isNL(char)) return newline(hl)
+  if (isComment(char)) return eolcomment
   throw new Error('Invalid')
 }
 
@@ -117,7 +142,7 @@ function eolcomment (hl, char) {
 }
 
 function defcolor_start (hl, char) {
-  if (isNL(char) || char === '#') throw new Error('Invalid')
+  if (isNL(char) || isComment(char)) throw new Error('Invalid')
   if (isSpace(char)) throw new Error('Invalid')
   hl.declr = {type: 'defcolor', name: char, color: ''}
   return defcolor
@@ -126,7 +151,7 @@ function defcolor_start (hl, char) {
 function defcolor (hl, char) {
   if (isSpace(char)) return defcolor_sep
   if (isNL(char)) return newline(hl)
-  if (char === '#') return eolcomment
+  if (isComment(char)) return eolcomment
   hl.declr.name += char
   return defcolor
 }
@@ -135,20 +160,20 @@ function sep(value) {
   return function thissep (hl, char) {
     if (isSpace(char)) return thissep
     if (isNL(char)) return newline(hl)
-    if (char === '#') return eolcomment
+    if (isComment(char)) return eolcomment
     return value(hl, char)
   }
 }
 
 var defcolor_sep = sep(function defcolor_value (hl, char) {
   if (isNL(char)) return newline(hl)
-  if (char === '#') return eolcomment
+  if (isComment(char)) return eolcomment
   hl.declr.color += char
   return defcolor_value
 })
 
 function defstate_start (hl, char) {
-  if (isNL(char) || char === '#') throw new Error('Invalid')
+  if (isNL(char) || isComment(char)) throw new Error('Invalid')
   if (isSpace(char)) throw new Error('Invalid')
   hl.declr = {type: 'defstate', name: char, color: ''}
   return defstate
@@ -157,20 +182,20 @@ function defstate_start (hl, char) {
 function defstate (hl, char) {
   if (isSpace(char)) return defstate_sep
   if (isNL(char)) throw new Error('Invalid')
-  if (char === '#') throw new Error('Invalid')
+  if (isComment(char)) throw new Error('Invalid')
   hl.declr.name += char
   return defstate
 }
 
 var defstate_sep = sep(function defstate_value (hl, char) {
   if (isNL(char)) return newline(hl)
-  if (char === '#') return eolcomment
+  if (isComment(char)) return eolcomment
   hl.declr.color += char
   return defstate_value
 })
 
 function cmd_start (hl, char) {
-  if (isNL(char) || char === '#') throw new Error('Invalid')
+  if (isNL(char) || isComment(char)) throw new Error('Invalid')
   if (isSpace(char)) throw new Error('Invalid')
   hl.declr = { type: '' }
   return cmd_name(hl, char)
@@ -201,34 +226,34 @@ function cmd_name (hl, char) {
 }
 
 var cmd_sep = sep(function (hl, char) {
-  if (isNL(char) || char === '#') throw new Error('Invalid')
+  if (isNL(char) || isComment(char)) throw new Error('Invalid')
   return cmd_value(hl, char)
 })
 
 function cmd_value (hl, char) {
   if (isNL(char)) return newline(hl)
-  if (char === '#') return eolcomment
+  if (isComment(char)) return eolcomment
   hl.declr.name += char
   return cmd_value
 }
 
 function cmd_end (hl, char) {
   if (isNL(char)) return newline(hl)
-  if (char === '#') return eolcomment
-  if (isSpace(char)) return subr_end
+  if (isComment(char)) return eolcomment
+  if (isSpace(char)) return cmd_end
   throw new Error('Invalid')
 }
 
 var done_start = match('done', function done_line (hl, char) {
   hl.declr = {type: 'stringsdone'}
   if (isNL(char)) return newline(hl)
-  if (char === '#') return eolcomment
+  if (isComment(char)) return eolcomment
   if (isSpace(char)) return done_line
   throw new Error('Invalid')
 })
 
-function stateline_buffer(hl) {
-  hl.declr = {type:'match', kind: 'buffer', match: '', goto: '', options: ''}
+function stateline_delim(hl) {
+  hl.declr = {type:'match', kind: 'delimiter', match: '', goto: '', options: ''}
   return stateline_sep_goto
 }
 
@@ -238,14 +263,14 @@ function stateline_glob (hl) {
 }
 
 var stateline_sep_goto = sep(function (hl, char) {
-  if (isNL(char) || char === '#') throw new Error('Invalid')
+  if (isNL(char) || isComment(char)) throw new Error('Invalid')
   if (isSpace(char)) throw new Error('Invalid')
   return stateline_goto(hl, char)
 })
 
 function stateline_goto (hl, char) {
   if (isNL(char)) return newline(hl)
-  if (char === '#') return eolcomment
+  if (isComment(char)) return eolcomment
   if (isSpace(char)) return stateline_sep_options
   hl.declr.goto += char
   return stateline_goto
@@ -253,7 +278,7 @@ function stateline_goto (hl, char) {
 
 var stateline_sep_options = sep(function stateline_options (hl, char) {
   if (isNL(char)) return newline(hl)
-  if (char === '#') return eolcomment
+  if (isComment(char)) return eolcomment
   hl.declr.options += char
   return stateline_options
 })
@@ -272,7 +297,8 @@ function stateline_str_match (hl, char) {
 }
 
 function stateline_str_bs (hl, char) {
-  if (isNL(char) || char === '#') throw new Error('Invalid')
+  if (isNL(char) || isComment(char)) throw new Error('Invalid')
+  if (char !== '"') hl.declr.match += '\\'
   hl.declr.match += char
   return stateline_str_match
 }

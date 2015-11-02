@@ -1,0 +1,6 @@
+{
+"name": "parse-jsf",
+"version": "1.0.0",
+"description": "WIP JSF Parser and Parser Generator for joe syntax files",
+"main": "hl.js"
+}
